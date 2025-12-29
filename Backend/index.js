@@ -18,8 +18,11 @@ app.use(cors({
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+  .then(() => console.log("✅ MongoDB connected successfully to:", process.env.MONGO_URI))
+  .catch(err => {
+    console.error("❌ MongoDB connection error:", err.message);
+    console.error("Make sure your MongoDB server is running and the MONGO_URI in .env is correct.");
+  });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/gemini", geminiRoutes);
