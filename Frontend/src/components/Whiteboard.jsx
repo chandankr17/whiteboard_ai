@@ -1,112 +1,81 @@
-import { Stage, Layer, Line, Rect, Text } from "react-konva";
+import { Stage, Layer, Line, Rect, Circle, Arrow, RegularPolygon, Text } from "react-konva";
 import { useState, useRef, useEffect } from "react";
-import socket from "../socket";
 
-
-export default function Whiteboard({ tool }) {
-  const [lines, setLines] = useState([]);
-  const [rects, setRects] = useState([]);
-  const [texts, setTexts] = useState([]);
-
+export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChange, undoTrigger, redoTrigger, clearTrigger }) {
+  const stageRef = useRef();
   const isDrawing = useRef(false);
 
-  const undoStack = useRef([]);
+  const [lines, setLines] = useState([]);
+  const [shapes, setShapes] = useState([]);
+  const [texts, setTexts] = useState([]);
+  const [editingText, setEditingText] = useState(null);
+
+  const history = useRef([]);
   const redoStack = useRef([]);
 
-  // Save state snapshot
   const saveHistory = () => {
-    undoStack.current.push({
+    history.current.push({
       lines: JSON.parse(JSON.stringify(lines)),
-      rects: JSON.parse(JSON.stringify(rects)),
+      shapes: JSON.parse(JSON.stringify(shapes)),
       texts: JSON.parse(JSON.stringify(texts)),
     });
     redoStack.current = [];
   };
 
-  // Undo
-  const undo = () => {
-    if (!undoStack.current.length) return;
-
-    redoStack.current.push({ lines, rects, texts });
-    const prev = undoStack.current.pop();
-
+  const handleUndo = () => {
+    if (!history.current.length) return;
+    redoStack.current.push({ lines, shapes, texts });
+    const prev = history.current.pop();
     setLines(prev.lines);
-    setRects(prev.rects);
+    setShapes(prev.shapes);
     setTexts(prev.texts);
   };
 
-  // Redo
-  const redo = () => {
+  const handleRedo = () => {
     if (!redoStack.current.length) return;
-
-    undoStack.current.push({ lines, rects, texts });
+    history.current.push({ lines, shapes, texts });
     const next = redoStack.current.pop();
-
     setLines(next.lines);
-    setRects(next.rects);
+    setShapes(next.shapes);
     setTexts(next.texts);
   };
 
-
-  useEffect(() => {
-  socket.on("board:init", (state) => {
-    setLines(state.lines);
-    setRects(state.rects);
-    setTexts(state.texts);
-  });
-
-  socket.on("board:update", (state) => {
-    setLines(state.lines);
-    setRects(state.rects);
-    setTexts(state.texts);
-  });
-
-  return () => {
-    socket.off("board:init");
-    socket.off("board:update");
+  const handleClear = () => {
+    saveHistory();
+    setLines([]);
+    setShapes([]);
+    setTexts([]);
   };
-}, []);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.ctrlKey && e.key === "z") undo();
-      if (e.ctrlKey && e.key === "y") redo();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lines, rects, texts]);
+  useEffect(() => { if (undoTrigger) handleUndo(); }, [undoTrigger]);
+  useEffect(() => { if (redoTrigger) handleRedo(); }, [redoTrigger]);
+  useEffect(() => { if (clearTrigger) handleClear(); }, [clearTrigger]);
 
   const handleMouseDown = (e) => {
+    const pos = stageRef.current.getPointerPosition();
+    if (!pos) return;
     saveHistory();
-    isDrawing.current = true;
-
-    const stage = e.target.getStage();
-    const pos = stage.getPointerPosition();
 
     if (tool === "pen") {
-      setLines([...lines, { points: [pos.x, pos.y] }]);
-    }
-
-    if (tool === "rect") {
-      setRects([
-        ...rects,
-        { x: pos.x, y: pos.y, width: 0, height: 0 },
-      ]);
+      isDrawing.current = true;
+      setLines([...lines, { points: [pos.x, pos.y], stroke: color, strokeWidth }]);
     }
 
     if (tool === "text") {
-      setTexts([...texts, { x: pos.x, y: pos.y, text: "Text" }]);
-      isDrawing.current = false;
+      setEditingText({ x: pos.x, y: pos.y, index: texts.length });
+      setTexts([...texts, { x: pos.x, y: pos.y, text: "", fill: color }]);
+    }
+
+    if (tool === "shape") {
+      isDrawing.current = true;
+      setShapes([...shapes, { x: pos.x, y: pos.y, width: 0, height: 0, shapeType, stroke: color, strokeWidth }]);
     }
   };
 
   const handleMouseMove = (e) => {
     if (!isDrawing.current) return;
-
-    const stage = e.target.getStage();
-    const pos = stage.getPointerPosition();
+    const pos = stageRef.current.getPointerPosition();
+    if (!pos) return;
 
     if (tool === "pen") {
       const lastLine = lines[lines.length - 1];
@@ -114,58 +83,66 @@ export default function Whiteboard({ tool }) {
       setLines([...lines.slice(0, -1), lastLine]);
     }
 
-    if (tool === "rect") {
-      const lastRect = rects[rects.length - 1];
-      lastRect.width = pos.x - lastRect.x;
-      lastRect.height = pos.y - lastRect.y;
-      setRects([...rects.slice(0, -1), lastRect]);
+    if (tool === "shape") {
+      const lastShape = shapes[shapes.length - 1];
+      lastShape.width = pos.x - lastShape.x;
+      lastShape.height = pos.y - lastShape.y;
+      setShapes([...shapes.slice(0, -1), lastShape]);
     }
+
+    onChange?.({ lines, shapes, texts });
   };
 
-  const handleMouseUp = () => {
-    isDrawing.current = false;
+  const handleMouseUp = () => { isDrawing.current = false; };
+
+  const handleTextChange = (e) => {
+    const newTexts = [...texts];
+    newTexts[editingText.index].text = e.target.value;
+    setTexts(newTexts);
+    onChange?.({ lines, shapes, texts: newTexts });
   };
 
-  useEffect(() => {
-  socket.emit("board:update", { lines, rects, texts });
-}, [lines, rects, texts]);
-
+  const handleTextBlur = () => setEditingText(null);
 
   return (
-    <Stage
-      width={window.innerWidth}
-      height={window.innerHeight - 60}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-    >
-      <Layer>
-        {lines.map((line, i) => (
-          <Line
-            key={i}
-            points={line.points}
-            stroke="black"
-            strokeWidth={2}
-            lineCap="round"
-            lineJoin="round"
-          />
-        ))}
+    <div style={{ width: "100%", height: "100%", position: "relative" }}>
+      <Stage
+        width={window.innerWidth * 0.8}
+        height={window.innerHeight - 60}
+        ref={stageRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        style={{ background: "#ffffff", cursor: tool === "pen" ? "crosshair" : "default" }}
+      >
 
-        {rects.map((rect, i) => (
-          <Rect
-            key={i}
-            x={rect.x}
-            y={rect.y}
-            width={rect.width}
-            height={rect.height}
-            stroke="black"
-          />
-        ))}
+        <Layer>
+          {lines.map((line, i) => <Line key={i} points={line.points} stroke={line.stroke} strokeWidth={line.strokeWidth} lineCap="round" lineJoin="round" />)}
 
-        {texts.map((text, i) => (
-          <Text key={i} x={text.x} y={text.y} text={text.text} />
-        ))}
-      </Layer>
-    </Stage>
+          {shapes.map((s, i) => {
+            switch (s.shapeType) {
+              case "rectangle": return <Rect key={i} x={s.x} y={s.y} width={s.width} height={s.height} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              case "square": const size = Math.max(Math.abs(s.width), Math.abs(s.height)); return <Rect key={i} x={s.x} y={s.y} width={size} height={size} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              case "circle": const r = Math.max(Math.abs(s.width), Math.abs(s.height)) / 2; return <Circle key={i} x={s.x + r} y={s.y + r} radius={r} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              case "triangle": return <RegularPolygon key={i} x={s.x + s.width / 2} y={s.y + s.height / 2} sides={3} radius={Math.max(Math.abs(s.width), Math.abs(s.height)) / 2} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              case "arrow": return <Arrow key={i} points={[s.x, s.y, s.x + s.width, s.y + s.height]} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              default: return null;
+            }
+          })}
+
+          {texts.map((t, i) => <Text key={i} x={t.x} y={t.y} text={t.text} fill={t.fill} fontSize={18} fontStyle="bold" />)}
+        </Layer>
+      </Stage>
+
+      {editingText && (
+        <input
+          autoFocus
+          style={{ position: "absolute", top: editingText.y, left: editingText.x, fontSize: "18px", border: "1px solid #333", padding: "2px", zIndex: 10 }}
+          value={texts[editingText.index].text}
+          onChange={handleTextChange}
+          onBlur={handleTextBlur}
+        />
+      )}
+    </div>
   );
 }

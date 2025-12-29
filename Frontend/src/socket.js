@@ -1,7 +1,9 @@
+// src/socket.js
 import { io } from "socket.io-client";
-const Board = require("./models/Board");
 
-
-const socket = io("http://localhost:5000");
+// Connect to backend
+const socket = io("http://localhost:5000", {
+  transports: ["websocket"], // ensures WebSocket transport
+});
 
 export default socket;
