@@ -1,20 +1,9 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
-const BoardSchema = new mongoose.Schema(
-  {
-    boardId: { type: String, required: true },
-    versions: [
-      {
-        state: Object,
-        updatedBy: String,
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
-  },
-  { timestamps: true }
-);
+const BoardSchema = new mongoose.Schema({
+  title: { type: String, default: "Untitled Board" },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  data: { type: Object, required: true },
+}, { timestamps: true });
 
-module.exports = mongoose.model("Board", BoardSchema);
+export default mongoose.model("Board", BoardSchema);

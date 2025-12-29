@@ -1,13 +1,15 @@
+
 import { Stage, Layer, Line, Rect, Circle, Arrow, RegularPolygon, Text } from "react-konva";
 import { useState, useRef, useEffect } from "react";
 
-export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChange, undoTrigger, redoTrigger, clearTrigger }) {
+export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChange, undoTrigger, redoTrigger, clearTrigger, initialData }) {
   const stageRef = useRef();
   const isDrawing = useRef(false);
 
-  const [lines, setLines] = useState([]);
-  const [shapes, setShapes] = useState([]);
-  const [texts, setTexts] = useState([]);
+  // Initialize state with initialData if available
+  const [lines, setLines] = useState(initialData?.lines || []);
+  const [shapes, setShapes] = useState(initialData?.shapes || []);
+  const [texts, setTexts] = useState(initialData?.texts || []);
   const [editingText, setEditingText] = useState(null);
 
   const history = useRef([]);
@@ -53,6 +55,7 @@ export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChan
 
   const handleMouseDown = (e) => {
     const pos = stageRef.current.getPointerPosition();
+    console.log("MouseDown", { tool, pos });
     if (!pos) return;
     saveHistory();
 
@@ -103,6 +106,12 @@ export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChan
   };
 
   const handleTextBlur = () => setEditingText(null);
+
+  // Update parent when state changes (initial load or edits)
+  useEffect(() => {
+    onChange?.({ lines, shapes, texts });
+  }, [lines, shapes, texts]);
+
 
   return (
     <div style={{ width: "100%", height: "100%", position: "relative" }}>

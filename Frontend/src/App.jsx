@@ -1,21 +1,100 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Whiteboard from "./components/Whiteboard";
 import Toolbar from "./components/Toolbar";
 import AISuggestions from "./components/AISuggestions";
+import Login from "./components/login";
+import Signup from "./components/Signup";
+import BoardList from "./components/BoardList";
+import api from "./api/api";
 
 function App() {
+  const [token, setToken] = useState(localStorage.getItem("token"));
+  const navigate = useNavigate();
+
+  // Whiteboard State
   const [tool, setTool] = useState("pen");
   const [shapeType, setShapeType] = useState("rectangle");
   const [color, setColor] = useState("#ff0000");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [boardData, setBoardData] = useState(null);
 
+  // Board Management State
+  const [boardId, setBoardId] = useState(null);
+  const [boardTitle, setBoardTitle] = useState("Untitled Board");
+  const [isBoardListOpen, setIsBoardListOpen] = useState(false);
+
   const [undoTrigger, setUndoTrigger] = useState(0);
   const [redoTrigger, setRedoTrigger] = useState(0);
   const [clearTrigger, setClearTrigger] = useState(0);
 
-  return (
+  const handleLogin = (newToken) => {
+    setToken(newToken);
+    navigate("/");
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setBoardId(null);
+    setBoardTitle("Untitled Board");
+    setBoardData(null);
+    navigate("/login");
+  };
+
+  const handleSave = async () => {
+    if (!boardData || (boardData.lines.length === 0 && boardData.shapes.length === 0 && boardData.texts.length === 0)) {
+      return alert("Nothing to save!");
+    }
+
+    // Prompt for title if new board
+    let titleToSave = boardTitle;
+    if (!boardId) {
+      const userTitle = prompt("Enter a name for this board:", boardTitle);
+      if (userTitle === null) return; // Cancelled
+      titleToSave = userTitle || "Untitled Board";
+      setBoardTitle(titleToSave);
+    }
+
+    try {
+      const res = await api.post("/boards/save", {
+        id: boardId,
+        title: titleToSave,
+        boardData
+      });
+      setBoardId(res.data._id);
+      alert("Board saved successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save board");
+    }
+  };
+
+  const handleNewPage = () => {
+    if (confirm("Are you sure? Unsaved changes will be lost.")) {
+      setBoardId(null);
+      setBoardTitle("Untitled Board");
+      setClearTrigger(prev => prev + 1); // Clears the canvas
+      setBoardData(null);
+    }
+  };
+
+  const handleLoadBoard = (board) => {
+    setBoardId(board._id);
+    setBoardTitle(board.title);
+    setBoardData(board.data);
+  };
+
+  const Dashboard = () => (
     <div style={{ display: "flex", height: "100vh", background: "#f0f4f8" }}>
+      <BoardList
+        isOpen={isBoardListOpen}
+        onClose={() => setIsBoardListOpen(false)}
+        onLoad={handleLoadBoard}
+        currentBoardId={boardId}
+      />
+
       {/* Left Panel: Toolbar + Whiteboard */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <Toolbar
@@ -26,6 +105,10 @@ function App() {
           onUndo={() => setUndoTrigger((prev) => prev + 1)}
           onRedo={() => setRedoTrigger((prev) => prev + 1)}
           onClear={() => setClearTrigger((prev) => prev + 1)}
+          onSave={handleSave}
+          onNewPage={handleNewPage}
+          onListBoards={() => setIsBoardListOpen(true)}
+          onLogout={handleLogout}
         />
 
         <div style={{
@@ -35,8 +118,20 @@ function App() {
           borderRadius: "10px",
           overflow: "hidden",
           background: "#ffffff",
+          position: "relative"
         }}>
+          {/* Current Title */}
+          <div style={{ position: "absolute", top: 10, left: 10, zIndex: 50, background: "rgba(255,255,255,0.8)", padding: "2px 8px", borderRadius: "4px", pointerEvents: "none" }}>
+            {boardTitle} {boardId ? "" : "(Unsaved)"}
+          </div>
+
           <Whiteboard
+            // Key forces remount when board changes
+            key={boardId || "new"}
+            initialData={boardId && boardData ? boardData : null}
+            // Note: I need to check if I have the boardData from load. 
+            // In handleLoadBoard, I only set metadata. Wait, handleLoadBoard gets full board data from API.
+            // So I need to setBoardData in handleLoadBoard.
             tool={tool}
             shapeType={shapeType}
             color={color}
@@ -61,6 +156,14 @@ function App() {
         <AISuggestions boardData={boardData} />
       </div>
     </div>
+  );
+
+  return (
+    <Routes>
+      <Route path="/login" element={!token ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
+      <Route path="/signup" element={!token ? <Signup onLogin={handleLogin} /> : <Navigate to="/" />} />
+      <Route path="/" element={token ? <Dashboard /> : <Navigate to="/login" />} />
+    </Routes>
   );
 }
 
