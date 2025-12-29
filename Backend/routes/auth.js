@@ -5,18 +5,14 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-// Register
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   try {
-    // Normalize email to lowercase
     const lowerEmail = email.toLowerCase();
 
-    // Check if user exists
     const existingUser = await User.findOne({ email: lowerEmail });
     if (existingUser) return res.status(400).json({ error: "User already exists" });
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email: lowerEmail, password: hashedPassword });
 
@@ -28,17 +24,14 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Login
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const lowerEmail = email.toLowerCase();
 
-    // Check if user exists
     const user = await User.findOne({ email: lowerEmail });
     if (!user) return res.status(400).json({ error: "User not found with this email" });
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ error: "Invalid password" });
 

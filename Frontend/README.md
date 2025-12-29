@@ -1,16 +1,45 @@
-# React + Vite
+# Whiteboard AI - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A powerful, real-time collaborative whiteboard application built with modern web technologies. This frontend delivers a seamless drawing experience, AI-powered suggestions, and secure user authentication.
 
-Currently, two official plugins are available:
+## 🚀 Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+-   **Real-time Collaboration**: Draw and brainstorm with others in real-time.
+-   **Interactive Canvas**: Powered by Konva.js for high-performance 2D drawing.
+-   **AI Integration**: Smart suggestions and enhancements powered by Google Gemini.
+-   **User Authentication**: Secure sign-up and login flows.
+-   **Responsive Design**: optimized for various screen sizes.
 
-## React Compiler
+## 🛠️ Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+-   **Framework**: [React 19](https://react.dev/)
+-   **Build Tool**: [Vite](https://vitejs.dev/)
+-   **Canvas Library**: [Konva](https://konvajs.org/) & [React-Konva](https://konvajs.org/docs/react/)
+-   **Real-time Communication**: [Socket.io Client](https://socket.io/)
+-   **HTTP Client**: [Axios](https://axios-http.com/)
+-   **Routing**: [React Router](https://reactrouter.com/)
 
-## Expanding the ESLint configuration
+## 📦 Installation & Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1.  **Clone the repository** (if you haven't already) and navigate to the `Frontend` directory:
+    ```bash
+    cd Frontend
+    ```
+
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    ```
+
+3.  **Start the development server**:
+    ```bash
+    npm run dev
+    ```
+    The app should now be running at `http://localhost:5173`.
+
+## 📜 Available Scripts
+
+-   `npm run dev`: Starts the development server with HMR.
+-   `npm run build`: Compiles the application for production.
+-   `npm run preview`: Preview the production build locally.
+-   `npm run lint`: Run ESLint to check for code quality issues.

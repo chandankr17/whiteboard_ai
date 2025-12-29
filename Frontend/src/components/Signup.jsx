@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import api from "../api/api";
 import { Link, useNavigate } from "react-router-dom";
@@ -16,7 +15,6 @@ export default function Signup({ onLogin }) {
             const res = await api.post("/auth/register", { name, email, password });
             const token = res.data.token;
 
-            // Auto-login
             localStorage.setItem("token", token);
             onLogin(token);
             navigate("/");

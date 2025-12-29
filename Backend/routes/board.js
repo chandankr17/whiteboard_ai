@@ -1,11 +1,9 @@
-
 import express from "express";
 import jwt from "jsonwebtoken";
 import Board from "../models/Board.js";
 
 const router = express.Router();
 
-// JWT middleware
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Unauthorized" });
@@ -18,13 +16,11 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Save board (Create or Update)
 router.post("/save", verifyToken, async (req, res) => {
   try {
     const { id, title, boardData } = req.body;
 
     if (id) {
-      // Update existing
       let board = await Board.findOne({ _id: id, user: req.user.id });
       if (!board) return res.status(404).json({ error: "Board not found" });
 
@@ -33,7 +29,6 @@ router.post("/save", verifyToken, async (req, res) => {
       await board.save();
       return res.json(board);
     } else {
-      // Create new
       const board = await Board.create({
         user: req.user.id,
         title: title || "Untitled Board",
@@ -47,7 +42,6 @@ router.post("/save", verifyToken, async (req, res) => {
   }
 });
 
-// Load all boards (Metadata only)
 router.get("/load", verifyToken, async (req, res) => {
   try {
     const boards = await Board.find({ user: req.user.id })
@@ -59,7 +53,6 @@ router.get("/load", verifyToken, async (req, res) => {
   }
 });
 
-// Load specific board
 router.get("/:id", verifyToken, async (req, res) => {
   try {
     const board = await Board.findOne({ _id: req.params.id, user: req.user.id });

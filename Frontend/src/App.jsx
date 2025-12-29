@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import Whiteboard from "./components/Whiteboard";
@@ -13,14 +12,12 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const navigate = useNavigate();
 
-  // Whiteboard State
   const [tool, setTool] = useState("pen");
   const [shapeType, setShapeType] = useState("rectangle");
   const [color, setColor] = useState("#ff0000");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [boardData, setBoardData] = useState(null);
 
-  // Board Management State
   const [boardId, setBoardId] = useState(null);
   const [boardTitle, setBoardTitle] = useState("Untitled Board");
   const [isBoardListOpen, setIsBoardListOpen] = useState(false);
@@ -48,7 +45,6 @@ function App() {
       return alert("Nothing to save!");
     }
 
-    // Prompt for title if new board
     let titleToSave = boardTitle;
     if (!boardId) {
       const userTitle = prompt("Enter a name for this board:", boardTitle);
@@ -75,7 +71,7 @@ function App() {
     if (confirm("Are you sure? Unsaved changes will be lost.")) {
       setBoardId(null);
       setBoardTitle("Untitled Board");
-      setClearTrigger(prev => prev + 1); // Clears the canvas
+      setClearTrigger(prev => prev + 1);
       setBoardData(null);
     }
   };
@@ -102,7 +98,6 @@ function App() {
                 currentBoardId={boardId}
               />
 
-              {/* Left Panel: Toolbar + Whiteboard */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                 <Toolbar
                   tool={tool} setTool={setTool}
@@ -118,19 +113,9 @@ function App() {
                   onLogout={handleLogout}
                 />
 
-                <div style={{
-                  flex: 1,
-                  margin: "10px",
-                  border: "2px solid #1e40af",
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                  background: "#ffffff",
-                  position: "relative"
-                }}>
-
+                <div style={{ flex: 1, margin: "10px", border: "2px solid #1e40af", borderRadius: "10px", overflow: "hidden", background: "#ffffff", position: "relative" }}>
 
                   <Whiteboard
-                    // Key forces remount ONLY when board ID changes explicitely
                     key={boardId || "new"}
                     initialData={boardData}
                     tool={tool}
@@ -145,14 +130,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Right Panel: AI Suggestions */}
-              <div style={{
-                width: "20%",
-                borderLeft: "2px solid #1e40af",
-                background: "#e0e7ff",
-                padding: "10px",
-                overflowY: "auto"
-              }}>
+              <div style={{ width: "20%", borderLeft: "2px solid #1e40af", background: "#e0e7ff", padding: "10px", overflowY: "auto" }}>
                 <h3 style={{ textAlign: "center", color: "#1e3a8a" }}>AI Suggestions</h3>
                 <AISuggestions boardData={boardData} />
               </div>

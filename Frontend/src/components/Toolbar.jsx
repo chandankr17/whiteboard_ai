@@ -1,51 +1,19 @@
 import React from "react";
 
-export default function Toolbar({
-  tool,
-  setTool,
-  shapeType,
-  setShapeType,
-  color,
-  setColor,
-  strokeWidth,
-  setStrokeWidth,
-  onUndo,
-  onRedo,
-  onClear,
-  onSave,
-  onLogout,
-  onNewPage,
-  onListBoards,
-}) {
+export default function Toolbar({ tool, setTool, shapeType, setShapeType, color, setColor, strokeWidth, setStrokeWidth, onUndo, onRedo, onClear, onSave, onLogout, onNewPage, onListBoards }) {
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        padding: "10px",
-        background: "#1e3a8a",
-        gap: "10px",
-        color: "white",
-        flexWrap: "wrap",
-        borderBottom: "2px solid #3b82f6",
+        display: "flex", alignItems: "center", padding: "10px", background: "#1e3a8a", gap: "10px", color: "white", flexWrap: "wrap", borderBottom: "2px solid #3b82f6",
       }}
     >
-      {/* Pen */}
       <button
         onClick={() => setTool("pen")}
-        style={{
-          padding: "5px 10px",
-          background: tool === "pen" ? "#3b82f6" : "#2563eb",
-          color: "white",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-        }}
+        style={{ padding: "5px 10px", background: tool === "pen" ? "#3b82f6" : "#2563eb", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
       >
         ✏️ Pen
       </button>
 
-      {/* Color Picker */}
       <input
         type="color"
         value={color}
@@ -54,7 +22,6 @@ export default function Toolbar({
         style={{ width: "40px", height: "30px", border: "none", cursor: "pointer" }}
       />
 
-      {/* Stroke Width */}
       <select
         value={strokeWidth}
         onChange={(e) => setStrokeWidth(Number(e.target.value))}
@@ -64,18 +31,10 @@ export default function Toolbar({
         ))}
       </select>
 
-      {/* Shapes */}
       <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
         <button
           onClick={() => setTool("shape")}
-          style={{
-            padding: "5px 10px",
-            background: tool === "shape" ? "#3b82f6" : "#2563eb",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
+          style={{ padding: "5px 10px", background: tool === "shape" ? "#3b82f6" : "#2563eb", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" }}
         >
           ⬜ Shapes
         </button>
@@ -88,7 +47,6 @@ export default function Toolbar({
         </select>
       </div>
 
-      {/* Clear / Undo / Redo */}
       <button onClick={onClear} style={buttonStyle}>🧹 Clear</button>
       <button onClick={onUndo} style={buttonStyle}>↩️ Undo</button>
       <button onClick={onRedo} style={buttonStyle}>↪️ Redo</button>
@@ -100,11 +58,4 @@ export default function Toolbar({
   );
 }
 
-const buttonStyle = {
-  padding: "5px 10px",
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  borderRadius: "4px",
-  cursor: "pointer",
-};
+const buttonStyle = { padding: "5px 10px", background: "#2563eb", color: "white", border: "none", borderRadius: "4px", cursor: "pointer" };

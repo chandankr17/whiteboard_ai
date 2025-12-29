@@ -14,10 +14,7 @@ export default function Login({ onLogin }) {
       const res = await api.post("/auth/login", { email, password });
       const token = res.data.token;
 
-      // Save JWT in localStorage
       localStorage.setItem("token", token);
-
-      // Inform parent that login succeeded
       onLogin(token);
       navigate("/");
     } catch (err) {

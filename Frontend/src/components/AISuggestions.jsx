@@ -22,12 +22,7 @@ export default function AISuggestions({ boardData }) {
   };
 
   return (
-    <div style={{
-      width: "300px",
-      borderLeft: "1px solid #ccc",
-      padding: "10px",
-      background: "#fafafa"
-    }}>
+    <div style={{ width: "300px", borderLeft: "1px solid #ccc", padding: "10px", background: "#fafafa" }}>
       <h3>AI Suggestions</h3>
       <button onClick={handleSuggest} disabled={loading}>
         {loading ? "Thinking..." : "Get Suggestions"}
