@@ -86,83 +86,82 @@ function App() {
     setBoardData(board.data);
   };
 
-  const Dashboard = () => (
-    <div style={{ display: "flex", height: "100vh", background: "#f0f4f8" }}>
-      <BoardList
-        isOpen={isBoardListOpen}
-        onClose={() => setIsBoardListOpen(false)}
-        onLoad={handleLoadBoard}
-        currentBoardId={boardId}
-      />
-
-      {/* Left Panel: Toolbar + Whiteboard */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-        <Toolbar
-          tool={tool} setTool={setTool}
-          color={color} setColor={setColor}
-          strokeWidth={strokeWidth} setStrokeWidth={setStrokeWidth}
-          shapeType={shapeType} setShapeType={setShapeType}
-          onUndo={() => setUndoTrigger((prev) => prev + 1)}
-          onRedo={() => setRedoTrigger((prev) => prev + 1)}
-          onClear={() => setClearTrigger((prev) => prev + 1)}
-          onSave={handleSave}
-          onNewPage={handleNewPage}
-          onListBoards={() => setIsBoardListOpen(true)}
-          onLogout={handleLogout}
-        />
-
-        <div style={{
-          flex: 1,
-          margin: "10px",
-          border: "2px solid #1e40af",
-          borderRadius: "10px",
-          overflow: "hidden",
-          background: "#ffffff",
-          position: "relative"
-        }}>
-          {/* Current Title */}
-          <div style={{ position: "absolute", top: 10, left: 10, zIndex: 50, background: "rgba(255,255,255,0.8)", padding: "2px 8px", borderRadius: "4px", pointerEvents: "none" }}>
-            {boardTitle} {boardId ? "" : "(Unsaved)"}
-          </div>
-
-          <Whiteboard
-            // Key forces remount when board changes
-            key={boardId || "new"}
-            initialData={boardId && boardData ? boardData : null}
-            // Note: I need to check if I have the boardData from load. 
-            // In handleLoadBoard, I only set metadata. Wait, handleLoadBoard gets full board data from API.
-            // So I need to setBoardData in handleLoadBoard.
-            tool={tool}
-            shapeType={shapeType}
-            color={color}
-            strokeWidth={strokeWidth}
-            onChange={setBoardData}
-            undoTrigger={undoTrigger}
-            redoTrigger={redoTrigger}
-            clearTrigger={clearTrigger}
-          />
-        </div>
-      </div>
-
-      {/* Right Panel: AI Suggestions */}
-      <div style={{
-        width: "20%",
-        borderLeft: "2px solid #1e40af",
-        background: "#e0e7ff",
-        padding: "10px",
-        overflowY: "auto"
-      }}>
-        <h3 style={{ textAlign: "center", color: "#1e3a8a" }}>AI Suggestions</h3>
-        <AISuggestions boardData={boardData} />
-      </div>
-    </div>
-  );
-
   return (
     <Routes>
       <Route path="/login" element={!token ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
       <Route path="/signup" element={!token ? <Signup onLogin={handleLogin} /> : <Navigate to="/" />} />
-      <Route path="/" element={token ? <Dashboard /> : <Navigate to="/login" />} />
+      <Route
+        path="/"
+        element={
+          token ? (
+            <div style={{ display: "flex", height: "100vh", background: "#f0f4f8" }}>
+              <BoardList
+                isOpen={isBoardListOpen}
+                onClose={() => setIsBoardListOpen(false)}
+                onLoad={handleLoadBoard}
+                currentBoardId={boardId}
+              />
+
+              {/* Left Panel: Toolbar + Whiteboard */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                <Toolbar
+                  tool={tool} setTool={setTool}
+                  color={color} setColor={setColor}
+                  strokeWidth={strokeWidth} setStrokeWidth={setStrokeWidth}
+                  shapeType={shapeType} setShapeType={setShapeType}
+                  onUndo={() => setUndoTrigger((prev) => prev + 1)}
+                  onRedo={() => setRedoTrigger((prev) => prev + 1)}
+                  onClear={() => setClearTrigger((prev) => prev + 1)}
+                  onSave={handleSave}
+                  onNewPage={handleNewPage}
+                  onListBoards={() => setIsBoardListOpen(true)}
+                  onLogout={handleLogout}
+                />
+
+                <div style={{
+                  flex: 1,
+                  margin: "10px",
+                  border: "2px solid #1e40af",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                  background: "#ffffff",
+                  position: "relative"
+                }}>
+
+
+                  <Whiteboard
+                    // Key forces remount ONLY when board ID changes explicitely
+                    key={boardId || "new"}
+                    initialData={boardData}
+                    tool={tool}
+                    shapeType={shapeType}
+                    color={color}
+                    strokeWidth={strokeWidth}
+                    onChange={setBoardData}
+                    undoTrigger={undoTrigger}
+                    redoTrigger={redoTrigger}
+                    clearTrigger={clearTrigger}
+                  />
+                </div>
+              </div>
+
+              {/* Right Panel: AI Suggestions */}
+              <div style={{
+                width: "20%",
+                borderLeft: "2px solid #1e40af",
+                background: "#e0e7ff",
+                padding: "10px",
+                overflowY: "auto"
+              }}>
+                <h3 style={{ textAlign: "center", color: "#1e3a8a" }}>AI Suggestions</h3>
+                <AISuggestions boardData={boardData} />
+              </div>
+            </div>
+          ) : (
+            <Navigate to="/login" />
+          )
+        }
+      />
     </Routes>
   );
 }

@@ -61,17 +61,18 @@ export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChan
 
     if (tool === "pen") {
       isDrawing.current = true;
-      setLines([...lines, { points: [pos.x, pos.y], stroke: color, strokeWidth }]);
+      setLines(prevLines => [...prevLines, { points: [pos.x, pos.y], stroke: color, strokeWidth }]);
     }
 
     if (tool === "text") {
       setEditingText({ x: pos.x, y: pos.y, index: texts.length });
-      setTexts([...texts, { x: pos.x, y: pos.y, text: "", fill: color }]);
+      setTexts(prevTexts => [...prevTexts, { x: pos.x, y: pos.y, text: "", fill: color }]);
     }
 
     if (tool === "shape") {
       isDrawing.current = true;
-      setShapes([...shapes, { x: pos.x, y: pos.y, width: 0, height: 0, shapeType, stroke: color, strokeWidth }]);
+      const currentShapeType = shapeType || "rectangle";
+      setShapes(prevShapes => [...prevShapes, { x: pos.x, y: pos.y, width: 0, height: 0, shapeType: currentShapeType, stroke: color, strokeWidth }]);
     }
   };
 
@@ -81,16 +82,22 @@ export default function Whiteboard({ tool, shapeType, color, strokeWidth, onChan
     if (!pos) return;
 
     if (tool === "pen") {
-      const lastLine = lines[lines.length - 1];
-      lastLine.points = lastLine.points.concat([pos.x, pos.y]);
-      setLines([...lines.slice(0, -1), lastLine]);
+      setLines((prevLines) => {
+        if (prevLines.length === 0) return prevLines;
+        const lastLine = { ...prevLines[prevLines.length - 1] };
+        lastLine.points = lastLine.points.concat([pos.x, pos.y]);
+        return [...prevLines.slice(0, -1), lastLine];
+      });
     }
 
     if (tool === "shape") {
-      const lastShape = shapes[shapes.length - 1];
-      lastShape.width = pos.x - lastShape.x;
-      lastShape.height = pos.y - lastShape.y;
-      setShapes([...shapes.slice(0, -1), lastShape]);
+      setShapes((prevShapes) => {
+        if (prevShapes.length === 0) return prevShapes;
+        const lastShape = { ...prevShapes[prevShapes.length - 1] };
+        lastShape.width = pos.x - lastShape.x;
+        lastShape.height = pos.y - lastShape.y;
+        return [...prevShapes.slice(0, -1), lastShape];
+      });
     }
 
     onChange?.({ lines, shapes, texts });

@@ -1,8 +1,4 @@
-import axios from "axios";
-
-const API = axios.create({
-  baseURL: "http://localhost:5000/api",
-});
+import api from "./api";
 
 export const getSuggestions = (boardData) =>
-  API.post("/gemini/suggest", { boardData });
+  api.post("/gemini/suggest", { boardData });

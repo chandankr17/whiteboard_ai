@@ -11,7 +11,12 @@ export default function AISuggestions({ boardData }) {
       const res = await getSuggestions(boardData);
       setSuggestion(res.data.suggestion);
     } catch (err) {
-      setSuggestion("Error getting suggestions");
+      console.error(err);
+      if (err.response) {
+        setSuggestion("Server Error: " + (err.response.data.error || err.response.status));
+      } else {
+        setSuggestion("Network Error: Could not reach backend.");
+      }
     }
     setLoading(false);
   };
