@@ -1,15 +1,10 @@
-import axios from "axios";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export const getGeminiSuggestion = async (prompt) => {
-  const res = await axios.post(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
-    {
-      contents: [{ parts: [{ text: prompt }] }]
-    },
-    {
-      params: { key: process.env.GEMINI_API_KEY }
-    }
-  );
-
-  return res.data.candidates[0].content.parts[0].text;
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text();
 };
