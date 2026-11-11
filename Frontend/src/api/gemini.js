@@ -1,4 +1,4 @@
 import api from "./api";
 
-export const getSuggestions = (boardData) =>
-  api.post("/gemini/suggest", { boardData });
+export const searchImages = (query) =>
+  api.get("/gemini/images", { params: { q: query } });
