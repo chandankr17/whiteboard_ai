@@ -93,7 +93,13 @@ export default function Toolbar({ tool, setTool, drawMode, onSelectTextMode, onS
 
                 <label className="toolbar-select">
                   <span className="sr-only">Shape type</span>
-                  <select value={shapeType} onChange={(e) => setShapeType(e.target.value)}>
+                  <select
+                    value={shapeType}
+                    onChange={(event) => {
+                      setShapeType(event.target.value);
+                      setTool("shape");
+                    }}
+                  >
                     <option value="rectangle">Rectangle</option>
                     <option value="square">Square</option>
                     <option value="circle">Circle</option>

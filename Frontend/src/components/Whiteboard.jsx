@@ -76,20 +76,24 @@ function BoardImage({ item, selected, onSelect, onMove, onTransformEnd, transfor
 const isPointInsideShape = (shape, point) => {
   if (shape.shapeType === "arrow") return false;
 
+  const left = Math.min(shape.x, shape.x + shape.width);
+  const top = Math.min(shape.y, shape.y + shape.height);
+  const width = Math.abs(shape.width);
+  const height = Math.abs(shape.height);
+
   if (shape.shapeType === "rectangle" || shape.shapeType === "square") {
     const size = shape.shapeType === "square"
-      ? Math.max(Math.abs(shape.width), Math.abs(shape.height))
+      ? Math.max(width, height)
       : null;
-    const width = size ?? Math.abs(shape.width);
-    const height = size ?? Math.abs(shape.height);
-    const left = shape.shapeType === "square" ? shape.x : Math.min(shape.x, shape.x + shape.width);
-    const top = shape.shapeType === "square" ? shape.y : Math.min(shape.y, shape.y + shape.height);
-    return point.x >= left && point.x <= left + width && point.y >= top && point.y <= top + height;
+    const shapeWidth = size ?? width;
+    const shapeHeight = size ?? height;
+    return point.x >= left && point.x <= left + shapeWidth
+      && point.y >= top && point.y <= top + shapeHeight;
   }
 
-  const radius = Math.max(Math.abs(shape.width), Math.abs(shape.height)) / 2;
-  const centerX = shape.shapeType === "circle" ? shape.x + radius : shape.x + shape.width / 2;
-  const centerY = shape.shapeType === "circle" ? shape.y + radius : shape.y + shape.height / 2;
+  const radius = Math.max(width, height) / 2;
+  const centerX = shape.x + shape.width / 2;
+  const centerY = shape.y + shape.height / 2;
 
   if (shape.shapeType === "circle") {
     return (point.x - centerX) ** 2 + (point.y - centerY) ** 2 <= radius ** 2;
@@ -125,6 +129,7 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
   const viewportRef = useRef();
   const textEditorRef = useRef(null);
   const isDrawing = useRef(false);
+  const shapeStart = useRef(null);
   const skipNextChange = useRef(false);
   const lastRemoteUpdateVersion = useRef(0);
 
@@ -340,6 +345,7 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
 
     if (tool === "shape") {
       isDrawing.current = true;
+      shapeStart.current = pos;
       const currentShapeType = shapeType || "rectangle";
       setShapes((prevShapes) => [
         ...prevShapes,
@@ -375,16 +381,31 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
       setShapes((prevShapes) => {
         if (prevShapes.length === 0) return prevShapes;
         const lastShape = { ...prevShapes[prevShapes.length - 1] };
-        lastShape.width = pos.x - lastShape.x;
-        lastShape.height = pos.y - lastShape.y;
+        const start = shapeStart.current || { x: lastShape.x, y: lastShape.y };
+        const width = pos.x - start.x;
+        const height = pos.y - start.y;
+        if (lastShape.shapeType === "arrow") {
+          lastShape.x = start.x;
+          lastShape.y = start.y;
+          lastShape.width = width;
+          lastShape.height = height;
+        } else {
+          lastShape.x = Math.min(start.x, pos.x);
+          lastShape.y = Math.min(start.y, pos.y);
+          lastShape.width = Math.abs(width);
+          lastShape.height = Math.abs(height);
+        }
         return [...prevShapes.slice(0, -1), lastShape];
       });
     }
 
-    onChange?.({ lines, shapes, texts, images });
+    onChange?.(pageId, { lines, shapes, texts, images });
   };
 
-  const handleMouseUp = () => { isDrawing.current = false; };
+  const handleMouseUp = () => {
+    isDrawing.current = false;
+    shapeStart.current = null;
+  };
 
   const handleTextChange = (e) => {
     const updatedText = e.target.value;
@@ -394,7 +415,7 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
         : text
     );
     setTexts(newTexts);
-    onChange?.({ lines, shapes, texts: newTexts, images });
+    onChange?.(pageId, { lines, shapes, texts: newTexts, images });
   };
 
   const handleStartTextEdit = (index, event) => {
@@ -445,8 +466,8 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
       skipNextChange.current = false;
       return;
     }
-    onChange?.({ lines, shapes, texts, images });
-  }, [images, lines, shapes, texts, onChange]);
+    onChange?.(pageId, { lines, shapes, texts, images });
+  }, [images, lines, pageId, shapes, texts, onChange]);
 
   return (
     <div ref={viewportRef} className={`canvas-viewport ${isA4 ? "is-a4" : ""}`}>
@@ -474,14 +495,14 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
           {shapes.map((s, i) => {
             const fillProps = s.shapeType === "arrow" ? {} : { fill: s.fill || "transparent" };
             switch (s.shapeType) {
-              case "rectangle": return <Rect key={i} {...fillProps} x={s.x} y={s.y} width={s.width} height={s.height} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+              case "rectangle": return <Rect key={i} {...fillProps} x={Math.min(s.x, s.x + s.width)} y={Math.min(s.y, s.y + s.height)} width={Math.abs(s.width)} height={Math.abs(s.height)} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
               case "square": {
                 const size = Math.max(Math.abs(s.width), Math.abs(s.height));
-                return <Rect key={i} {...fillProps} x={s.x} y={s.y} width={size} height={size} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+                return <Rect key={i} {...fillProps} x={Math.min(s.x, s.x + s.width)} y={Math.min(s.y, s.y + s.height)} width={size} height={size} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
               }
               case "circle": {
                 const r = Math.max(Math.abs(s.width), Math.abs(s.height)) / 2;
-                return <Circle key={i} {...fillProps} x={s.x + r} y={s.y + r} radius={r} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
+                return <Circle key={i} {...fillProps} x={s.x + s.width / 2} y={s.y + s.height / 2} radius={r} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
               }
               case "triangle": return <RegularPolygon key={i} {...fillProps} x={s.x + s.width / 2} y={s.y + s.height / 2} sides={3} radius={Math.max(Math.abs(s.width), Math.abs(s.height)) / 2} stroke={s.stroke} strokeWidth={s.strokeWidth} />;
               case "arrow": return <Arrow key={i} points={[s.x, s.y, s.x + s.width, s.y + s.height]} stroke={s.stroke} strokeWidth={s.strokeWidth} />;

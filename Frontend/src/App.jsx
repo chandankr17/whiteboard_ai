@@ -227,6 +227,11 @@ function App() {
   };
 
   const handlePageDataChange = useCallback((pageId, pageData) => {
+    if (typeof pageId !== "string" || !pageData || typeof pageData !== "object") {
+      console.error("Ignoring invalid whiteboard page update.", { pageId, pageData });
+      return;
+    }
+
     const previousPage = pageSnapshots.current.get(pageId);
     const removedIds = getRemovedItems(previousPage, pageData);
     pageSnapshots.current.set(pageId, pageData);
