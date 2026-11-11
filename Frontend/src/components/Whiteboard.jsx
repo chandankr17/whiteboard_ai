@@ -1,6 +1,15 @@
 import { Stage, Layer, Line, Rect, Circle, Arrow, RegularPolygon, Text, Image as KonvaImage, Transformer } from "react-konva";
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 
+const createBoardItemId = () =>
+  globalThis.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+const ensureItemIds = (items, pageId, itemType) =>
+  items.map((item, index) => ({
+    ...item,
+    id: item.id || `${pageId}-${itemType}-${index}`,
+  }));
+
 function BoardImage({ item, selected, onSelect, onMove, onTransformEnd, transformerRef }) {
   const [image, setImage] = useState(null);
   const imageNodeRef = useRef(null);
@@ -111,11 +120,13 @@ const isPointInsideShape = (shape, point) => {
   return false;
 };
 
-export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, color, textFontSize = 18, strokeWidth, onChange, undoTrigger, redoTrigger, clearTrigger, initialData, imageToAdd, onImageAdded, pageFormat = "freeform" }) {
+export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, color, textFontSize = 18, strokeWidth, onChange, undoTrigger, redoTrigger, clearTrigger, initialData, imageToAdd, onImageAdded, pageFormat = "freeform", remoteUpdate }) {
   const stageRef = useRef();
   const viewportRef = useRef();
   const textEditorRef = useRef(null);
   const isDrawing = useRef(false);
+  const skipNextChange = useRef(false);
+  const lastRemoteUpdateVersion = useRef(0);
 
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const isA4 = pageFormat === "a4-portrait" || pageFormat === "a4-landscape";
@@ -128,10 +139,10 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
     : 1;
   const stageOffsetX = isA4 ? 20 + Math.max(0, (canvasSize.width - 40 - pageWidth * stageScale) / 2) : 0;
   const stageOffsetY = isA4 ? 20 + Math.max(0, (canvasSize.height - 40 - pageHeight * stageScale) / 2) : 0;
-  const [lines, setLines] = useState(initialData?.lines || []);
-  const [shapes, setShapes] = useState(initialData?.shapes || []);
-  const [texts, setTexts] = useState(initialData?.texts || []);
-  const [images, setImages] = useState(initialData?.images || []);
+  const [lines, setLines] = useState(() => ensureItemIds(initialData?.lines || [], pageId, "line"));
+  const [shapes, setShapes] = useState(() => ensureItemIds(initialData?.shapes || [], pageId, "shape"));
+  const [texts, setTexts] = useState(() => ensureItemIds(initialData?.texts || [], pageId, "text"));
+  const [images, setImages] = useState(() => ensureItemIds(initialData?.images || [], pageId, "image"));
   const [editingText, setEditingText] = useState(null);
   const [selectedImageId, setSelectedImageId] = useState(null);
 
@@ -299,7 +310,10 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
 
     if (tool === "pen") {
       isDrawing.current = true;
-      setLines(prevLines => [...prevLines, { points: [pos.x, pos.y], stroke: color, strokeWidth }]);
+      setLines((prevLines) => [
+        ...prevLines,
+        { id: createBoardItemId(), points: [pos.x, pos.y], stroke: color, strokeWidth },
+      ]);
     }
 
     if (tool === "text") {
@@ -319,7 +333,7 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
         setEditingText({ x: pos.x, y: pos.y, index });
         setTexts((prevTexts) => [
           ...prevTexts,
-          { x: pos.x, y: pos.y, text: "", fill: color, fontSize: textFontSize },
+          { id: createBoardItemId(), x: pos.x, y: pos.y, text: "", fill: color, fontSize: textFontSize },
         ]);
       }
     }
@@ -327,7 +341,19 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
     if (tool === "shape") {
       isDrawing.current = true;
       const currentShapeType = shapeType || "rectangle";
-      setShapes(prevShapes => [...prevShapes, { x: pos.x, y: pos.y, width: 0, height: 0, shapeType: currentShapeType, stroke: color, strokeWidth }]);
+      setShapes((prevShapes) => [
+        ...prevShapes,
+        {
+          id: createBoardItemId(),
+          x: pos.x,
+          y: pos.y,
+          width: 0,
+          height: 0,
+          shapeType: currentShapeType,
+          stroke: color,
+          strokeWidth,
+        },
+      ]);
     }
   };
 
@@ -381,6 +407,25 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
 
   const handleTextBlur = () => setEditingText(null);
 
+  useEffect(() => {
+    if (!remoteUpdate || remoteUpdate.version === lastRemoteUpdateVersion.current) return;
+    lastRemoteUpdateVersion.current = remoteUpdate.version;
+    const remotePage = remoteUpdate.kind === "page"
+      ? remoteUpdate.pageId === pageId ? remoteUpdate.pageData : null
+      : remoteUpdate.boardData?.pages.find((page) => page.id === pageId);
+    if (!remotePage) return;
+
+    const frameId = requestAnimationFrame(() => {
+      skipNextChange.current = true;
+      setLines(ensureItemIds(remotePage.lines || [], pageId, "line"));
+      setShapes(ensureItemIds(remotePage.shapes || [], pageId, "shape"));
+      setTexts(ensureItemIds(remotePage.texts || [], pageId, "text"));
+      setImages(ensureItemIds(remotePage.images || [], pageId, "image"));
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [pageId, remoteUpdate]);
+
   useLayoutEffect(() => {
     if (!editingText || !textEditorRef.current) return;
     textEditorRef.current.focus();
@@ -396,6 +441,10 @@ export default function Whiteboard({ pageId, pageZoom = 1, tool, shapeType, colo
   };
 
   useEffect(() => {
+    if (skipNextChange.current) {
+      skipNextChange.current = false;
+      return;
+    }
     onChange?.({ lines, shapes, texts, images });
   }, [images, lines, shapes, texts, onChange]);
 

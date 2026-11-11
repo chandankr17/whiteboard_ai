@@ -26,11 +26,18 @@ Whiteboard AI is a web-based workspace for writing, drawing, and organizing visu
 - Adds selected images to the active page; images can be moved, resized, and individually removed.
 - Includes an optional backend endpoint that uses Gemini to analyze a board screenshot and search for related images. The current frontend image panel uses text search and does not call this endpoint.
 
+### Live collaboration
+
+- Lets the board owner generate a share link for a saved board. Invitees sign in, open the link, and join the same Socket.IO room.
+- Broadcasts page edits, document changes, and collaborator presence to everyone in that board room.
+- Persists collaborators' changes to MongoDB as they work. Only the board owner can create a share link or use the manual Save board action.
+- Stores only a hash of the invite token. Creating a new invite replaces the previous token and invalidates older links.
+
 ### Accounts and saved boards
 
 - Provides account registration and login using email and password.
 - Hashes passwords before storing them and issues JWTs on successful registration or login.
-- Lists, loads, creates, updates, and deletes boards scoped to the authenticated user.
+- Lists, loads, creates, updates, and deletes boards scoped to the authenticated user; board owners can invite other signed-in users to collaborate on a specific board.
 - Stores the page and canvas content in a flexible MongoDB board-data field.
 
 ## Technology stack
@@ -44,7 +51,7 @@ Whiteboard AI is a web-based workspace for writing, drawing, and organizing visu
 | React Router | Login, signup, and workspace routes |
 | React-Konva and Konva | Interactive canvas rendering and drawing objects |
 | Axios | HTTP requests to the backend API |
-| Socket.IO Client | Dependency/module is present, but live collaboration is not currently connected or implemented |
+| Socket.IO Client and Socket.IO | Authenticated realtime board rooms, page/document updates, and presence |
 | ESLint | Frontend linting |
 
 ### Backend and services
@@ -72,7 +79,8 @@ The backend API is mounted under `/api`. Protected routes require the JWT return
 | `POST` | `/api/auth/login` | No | Verify credentials and return a token and user details |
 | `POST` | `/api/boards/save` | Yes | Create a board, or update an existing board when its `id` is supplied |
 | `GET` | `/api/boards/load` | Yes | List the signed-in user's boards |
-| `GET` | `/api/boards/:id` | Yes | Retrieve one board owned by the signed-in user |
+| `POST` | `/api/boards/:id/share` | Owner | Create or rotate a board invite token |
+| `GET` | `/api/boards/:id?shareToken=<token>` | Owner or invitee | Retrieve a board owned by the signed-in user or opened with a valid invite |
 | `DELETE` | `/api/boards/:id` | Yes | Delete one board owned by the signed-in user |
 | `GET` | `/api/gemini/images?q=<query>` | Yes | Search Wikimedia Commons using text |
 | `POST` | `/api/gemini/suggest` | Yes | Analyze a PNG board image with Gemini and search Wikimedia Commons for related images |
@@ -92,11 +100,12 @@ Browser
   Express API
     Auth routes       -> MongoDB user records
     Board routes      -> MongoDB board records
+    Socket.IO rooms   -> authenticated collaborators and persisted updates
     Image routes      -> Wikimedia Commons
                      -> Gemini (optional screenshot suggestions)
 ```
 
-The frontend owns the interactive document experience and sends board data to the API for persistence. The backend verifies tokens and restricts board access to the owning user. Page-based documents are stored within the board's data field; no separate page collection is required.
+The frontend owns the interactive document experience and sends board data to the API and Socket.IO server. The backend verifies tokens, limits normal board access to the owner, and allows invitees with a valid share token to join realtime rooms. Invitees can edit shared content, while only the owner can issue new invite links or delete the board. Page-based documents are stored within the board's data field; no separate page collection is required.
 
 ## Repository structure
 
@@ -123,7 +132,7 @@ whiteboard_ai/
 
 ## Current implementation notes
 
-- Live multi-user collaboration is not implemented, despite the Socket.IO client dependency/module being present.
+- Socket.IO collaboration requires a saved board and an owner-generated invite link. Invitees must sign in before opening the link. Creating a new link invalidates the previous one.
 - The frontend image panel uses typed Wikimedia Commons search. Gemini-based screenshot suggestions are available only through the backend endpoint and are not currently wired into the panel.
 - Image search and board operations require authentication; registration and login do not.
 - Wikimedia Commons provides source and license metadata, but users should check the original source page for the exact license and attribution requirements.

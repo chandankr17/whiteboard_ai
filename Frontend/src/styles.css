@@ -254,6 +254,27 @@ button {
   flex: 0 0 auto;
 }
 
+.board-share-button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #e2def8;
+  border-radius: 9px;
+  background: #f7f5ff;
+  color: #5947bf;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.board-share-button:hover {
+  border-color: #c9c0f1;
+  background: #efecff;
+}
+
+.collaboration-error {
+  color: #b42332 !important;
+}
+
 .board-pagebar {
   display: flex;
   min-height: 38px;
@@ -497,6 +518,42 @@ button {
   border-radius: 50%;
   background: #35b77b;
   content: "";
+}
+
+.board-status.is-connecting,
+.board-status.is-joining,
+.board-status.is-offline,
+.board-status.is-error,
+.board-status.is-idle {
+  border-color: #e6e9f0;
+  background: #f7f8fb;
+  color: #727d91;
+}
+
+.board-status.is-connecting::before,
+.board-status.is-joining::before {
+  background: #e5a52b;
+}
+
+.board-status.is-offline::before,
+.board-status.is-error::before {
+  background: #d65b69;
+}
+
+.workspace[data-theme="dark"] .board-share-button {
+  border-color: #534b81;
+  background: #302d47;
+  color: #c5baff;
+}
+
+.workspace[data-theme="dark"] .board-status.is-connecting,
+.workspace[data-theme="dark"] .board-status.is-joining,
+.workspace[data-theme="dark"] .board-status.is-offline,
+.workspace[data-theme="dark"] .board-status.is-error,
+.workspace[data-theme="dark"] .board-status.is-idle {
+  border-color: #3a4050;
+  background: #252a37;
+  color: #b3bbca;
 }
 
 .canvas-shell {
@@ -1297,9 +1354,19 @@ button {
   }
 
   .board-status {
-    display: none;
+    max-width: 124px;
+    overflow: hidden;
+    padding: 5px 7px;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
+  .board-share-button {
+    min-height: 32px;
+    padding: 0 9px;
+    font-size: 10px;
+  }
   .board-save-button {
     min-height: 32px;
     padding: 0 10px;

@@ -1,14 +1,12 @@
 import { useState } from "react";
 import api from "../api/api";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 export default function Signup({ onLogin }) {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
-    const navigate = useNavigate();
-
     const handleSignup = async (e) => {
         e.preventDefault();
         try {
@@ -17,7 +15,6 @@ export default function Signup({ onLogin }) {
 
             localStorage.setItem("token", token);
             onLogin(token);
-            navigate("/");
         } catch (err) {
             console.error(err);
             if (err.response) {

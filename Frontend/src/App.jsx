@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import Whiteboard from "./components/Whiteboard";
 import Toolbar from "./components/Toolbar";
 import AISuggestions from "./components/AISuggestions";
@@ -7,6 +7,7 @@ import Login from "./components/login";
 import Signup from "./components/Signup";
 import BoardList from "./components/BoardList";
 import api from "./api/api";
+import socket from "./socket";
 
 const createPage = (number) => ({
   id: `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -17,6 +18,50 @@ const createPage = (number) => ({
   texts: [],
   images: [],
 });
+
+const normalizePageItems = (page) => {
+  const normalized = { ...page };
+  for (const collection of ["lines", "shapes", "texts", "images"]) {
+    normalized[collection] = (page[collection] || []).map((item, index) => ({
+      ...item,
+      id: item.id || `${page.id}-${collection}-${index}`,
+    }));
+  }
+  return normalized;
+};
+
+const getRemovedItems = (previousPage, nextPage) => Object.fromEntries(
+  ["lines", "shapes", "texts", "images"].map((collection) => {
+    const nextIds = new Set((nextPage[collection] || []).map((item, index) =>
+      item.id || `${nextPage.id}-${collection}-${index}`
+    ));
+    return [
+      collection,
+      (previousPage?.[collection] || [])
+        .map((item, index) => item.id || `${nextPage.id}-${collection}-${index}`)
+        .filter((id) => !nextIds.has(id)),
+    ];
+  })
+);
+
+const mergePendingPageChanges = (serverPage, localPage, removedIds = {}) => {
+  const mergedPage = { ...serverPage, ...localPage, id: serverPage.id };
+  for (const collection of ["lines", "shapes", "texts", "images"]) {
+    const itemsById = new Map(
+      (serverPage[collection] || []).map((item, index) => [
+        item.id || `${serverPage.id}-${collection}-${index}`,
+        item,
+      ])
+    );
+    for (const id of removedIds[collection] || []) itemsById.delete(id);
+    (localPage[collection] || []).forEach((item, index) => {
+      const id = item.id || `${serverPage.id}-${collection}-${index}`;
+      itemsById.set(id, { ...item, id });
+    });
+    mergedPage[collection] = [...itemsById.values()];
+  }
+  return mergedPage;
+};
 
 const createBoardDocument = (data) => {
   if (Array.isArray(data?.pages) && data.pages.length > 0) {
@@ -29,14 +74,14 @@ const createBoardDocument = (data) => {
       shapes: page.shapes || [],
       texts: page.texts || [],
       images: page.images || [],
-    }));
+    })).map(normalizePageItems);
     const activePageId = pages.some((page) => page.id === data.activePageId)
       ? data.activePageId
       : pages[0].id;
     return { pages, activePageId };
   }
 
-  const firstPage = {
+  const firstPage = normalizePageItems({
     ...createPage(1),
     ...(data || {}),
     id: "page-1",
@@ -46,7 +91,7 @@ const createBoardDocument = (data) => {
     shapes: data?.shapes || [],
     texts: data?.texts || [],
     images: data?.images || [],
-  };
+  });
   return { pages: [firstPage], activePageId: firstPage.id };
 };
 
@@ -56,6 +101,7 @@ function App() {
     localStorage.getItem("workspace-theme") === "dark" ? "dark" : "light"
   );
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [tool, setTool] = useState("pen");
   const [drawMode, setDrawMode] = useState(false);
@@ -67,6 +113,12 @@ function App() {
   const [imageToAdd, setImageToAdd] = useState(null);
 
   const [boardId, setBoardId] = useState(null);
+  const [shareToken, setShareToken] = useState(null);
+  const [isBoardOwner, setIsBoardOwner] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState("idle");
+  const [collaboratorCount, setCollaboratorCount] = useState(0);
+  const [collaborationError, setCollaborationError] = useState("");
+  const [remoteUpdate, setRemoteUpdate] = useState(null);
   const [documentVersion, setDocumentVersion] = useState(0);
   const [boardTitle, setBoardTitle] = useState("Untitled Board");
   const [isBoardListOpen, setIsBoardListOpen] = useState(false);
@@ -75,19 +127,34 @@ function App() {
   const [redoTrigger, setRedoTrigger] = useState({ pageId: null, version: 0 });
   const [clearTrigger, setClearTrigger] = useState({ pageId: null, version: 0 });
   const [pageZoom, setPageZoom] = useState(100);
+  const joinedBoardId = useRef(null);
+  const remoteUpdateVersion = useRef(0);
+  const pageUpdateTimers = useRef(new Map());
+  const pageSnapshots = useRef(new Map());
   const activePage = boardData.pages.find((page) => page.id === boardData.activePageId) || boardData.pages[0];
+  const rememberDocumentPages = (document) => {
+    pageSnapshots.current.clear();
+    document.pages.forEach((page) => pageSnapshots.current.set(page.id, page));
+  };
 
   const handleLogin = (newToken) => {
     setToken(newToken);
-    navigate("/");
+    const pendingInvite = sessionStorage.getItem("pending-board-invite");
+    sessionStorage.removeItem("pending-board-invite");
+    navigate(pendingInvite || "/");
   };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     setToken(null);
     setBoardId(null);
+    setShareToken(null);
+    setIsBoardOwner(true);
     setBoardTitle("Untitled Board");
-    setBoardData(createBoardDocument());
+    setRemoteUpdate(null);
+    const newDocument = createBoardDocument();
+    rememberDocumentPages(newDocument);
+    setBoardData(newDocument);
     setDocumentVersion((version) => version + 1);
     navigate("/login");
   };
@@ -99,6 +166,7 @@ function App() {
   };
 
   const handleSave = async () => {
+    if (!isBoardOwner) return;
     const hasContent = boardData.pages.some((page) =>
       page.lines.length > 0 ||
       page.shapes.length > 0 ||
@@ -124,6 +192,7 @@ function App() {
         boardData
       });
       setBoardId(res.data._id);
+      setIsBoardOwner(true);
       alert("Board saved successfully!");
     } catch (err) {
       console.error(err);
@@ -134,35 +203,71 @@ function App() {
   const handleNewBoard = () => {
     if (confirm("Are you sure? Unsaved changes will be lost.")) {
       setBoardId(null);
+      setShareToken(null);
+      setIsBoardOwner(true);
       setBoardTitle("Untitled Board");
-      setBoardData(createBoardDocument());
+      setRemoteUpdate(null);
+      const newDocument = createBoardDocument();
+      rememberDocumentPages(newDocument);
+      setBoardData(newDocument);
     }
   };
 
   const handleLoadBoard = (board) => {
     setBoardId(board._id);
+    setShareToken(null);
+    setIsBoardOwner(true);
+    setCollaborationError("");
     setBoardTitle(board.title);
-    setBoardData(createBoardDocument(board.data));
+    const document = createBoardDocument(board.data);
+    setRemoteUpdate(null);
+    rememberDocumentPages(document);
+    setBoardData(document);
     setDocumentVersion((version) => version + 1);
   };
 
   const handlePageDataChange = useCallback((pageId, pageData) => {
+    const previousPage = pageSnapshots.current.get(pageId);
+    const removedIds = getRemovedItems(previousPage, pageData);
+    pageSnapshots.current.set(pageId, pageData);
     setBoardData((current) => ({
       ...current,
       pages: current.pages.map((page) =>
         page.id === pageId ? { ...page, ...pageData } : page
       ),
     }));
+    const targetBoardId = joinedBoardId.current;
+    const previous = pageUpdateTimers.current.get(pageId);
+    if (previous) clearTimeout(previous.timer);
+    const pendingUpdate = { targetBoardId, pageData, removedIds, timer: null };
+    pendingUpdate.timer = setTimeout(() => {
+      const update = pageUpdateTimers.current.get(pageId);
+      if (targetBoardId && joinedBoardId.current === targetBoardId) {
+        socket.emit("board:page-update", {
+          pageId,
+          pageData: update?.pageData || pageData,
+          removedIds: update?.removedIds || removedIds,
+        });
+      }
+      pageUpdateTimers.current.delete(pageId);
+    }, 80);
+    pageUpdateTimers.current.set(pageId, pendingUpdate);
   }, []);
+
+  const publishDocumentUpdate = (nextDocument, operation) => {
+    setBoardData(nextDocument);
+    if (joinedBoardId.current) {
+      socket.emit("board:document-operation", operation);
+    }
+  };
 
   const handleAddPage = () => {
     const newPage = createPage(boardData.pages.length + 1);
-    setBoardData((current) => {
-      return {
-        pages: [...current.pages, newPage],
-        activePageId: newPage.id,
-      };
-    });
+    const nextDocument = {
+      pages: [...boardData.pages, newPage],
+      activePageId: newPage.id,
+    };
+    publishDocumentUpdate(nextDocument, { type: "add-page", page: newPage });
     requestAnimationFrame(() => {
       document.getElementById(`document-page-${newPage.id}`)?.scrollIntoView({
         behavior: "smooth",
@@ -189,15 +294,22 @@ function App() {
 
     const pageToRemove = boardData.pages.find((page) => page.id === pageId);
     if (!confirm(`Remove ${pageToRemove?.title || "this page"}? This cannot be undone.`)) return;
+    const pendingPageUpdate = pageUpdateTimers.current.get(pageId);
+    if (pendingPageUpdate) {
+      clearTimeout(pendingPageUpdate.timer);
+      pageUpdateTimers.current.delete(pageId);
+    }
+    pageSnapshots.current.delete(pageId);
 
-    setBoardData((current) => {
-      const pageIndex = current.pages.findIndex((page) => page.id === pageId);
-      const pages = current.pages.filter((page) => page.id !== pageId);
-      const nextActivePage = pageId === current.activePageId
+    const pageIndex = boardData.pages.findIndex((page) => page.id === pageId);
+    const pages = boardData.pages.filter((page) => page.id !== pageId);
+    const nextActivePage = pageId === boardData.activePageId
         ? pages[Math.min(pageIndex, pages.length - 1)]
-        : pages.find((page) => page.id === current.activePageId);
-      return { pages, activePageId: nextActivePage.id };
-    });
+        : pages.find((page) => page.id === boardData.activePageId);
+    publishDocumentUpdate(
+      { pages, activePageId: nextActivePage.id },
+      { type: "remove-page", pageId }
+    );
   };
 
   const handleUndo = () => {
@@ -214,12 +326,12 @@ function App() {
 
   const handlePageFormatChange = (event) => {
     const format = event.target.value;
-    setBoardData((current) => ({
-      ...current,
-      pages: current.pages.map((page) =>
-        page.id === current.activePageId ? { ...page, format } : page
+    publishDocumentUpdate({
+      ...boardData,
+      pages: boardData.pages.map((page) =>
+        page.id === boardData.activePageId ? { ...page, format } : page
       ),
-    }));
+    }, { type: "set-format", pageId: boardData.activePageId, format });
   };
 
   const handleAddImage = (image) => {
@@ -230,14 +342,204 @@ function App() {
     });
   };
 
-  return (
-    <Routes>
-      <Route path="/login" element={!token ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
-      <Route path="/signup" element={!token ? <Signup onLogin={handleLogin} /> : <Navigate to="/" />} />
-      <Route
-        path="/"
-        element={
-          token ? (
+  const handleCreateShareLink = async () => {
+    if (!boardId || !isBoardOwner) return;
+    setCollaborationError("");
+    try {
+      const response = await api.post(`/boards/${boardId}/share`);
+      const inviteUrl = `${window.location.origin}/share/${boardId}/${response.data.shareToken}`;
+      try {
+        await navigator.clipboard.writeText(inviteUrl);
+        alert("Invite link copied. Anyone with this link can edit this board.");
+      } catch {
+        window.prompt("Copy this invite link. Anyone with the link can edit this board:", inviteUrl);
+      }
+    } catch (error) {
+      console.error("Create board invite failed:", error);
+      setCollaborationError(
+        error.response?.data?.error || "Could not create or copy the board invite link."
+      );
+    }
+  };
+
+  useEffect(() => {
+    const invite = location.pathname.match(/^\/share\/([^/]+)\/([^/]+)$/);
+    if (!invite) return undefined;
+
+    if (!token) {
+      sessionStorage.setItem("pending-board-invite", location.pathname);
+      navigate("/login", { replace: true });
+      return undefined;
+    }
+
+    let active = true;
+    api.get(`/boards/${invite[1]}`, { params: { shareToken: invite[2] } })
+      .then((response) => {
+        if (!active) return;
+        const document = createBoardDocument(response.data.data);
+        setCollaborationError("");
+        setBoardId(response.data._id);
+        setShareToken(invite[2]);
+        setIsBoardOwner(Boolean(response.data.isOwner));
+        setBoardTitle(response.data.title);
+        rememberDocumentPages(document);
+        setBoardData(document);
+        setDocumentVersion((version) => version + 1);
+        navigate("/", { replace: true });
+      })
+      .catch((error) => {
+        if (!active) return;
+        console.error("Open shared board failed:", error);
+        setCollaborationError(
+          error.response?.data?.error || "This invite link is invalid or has expired."
+        );
+      });
+
+    return () => { active = false; };
+  }, [location.pathname, navigate, token]);
+
+  useEffect(() => {
+    if (!token || !boardId) {
+      joinedBoardId.current = null;
+      socket.disconnect();
+      return undefined;
+    }
+
+    let active = true;
+    const scheduledPageUpdates = pageUpdateTimers.current;
+    socket.auth = { token };
+
+    const handleConnect = () => {
+      setConnectionStatus("joining");
+      setCollaborationError("");
+      socket.emit("board:join", { boardId, shareToken }, (result) => {
+        if (!active) return;
+        if (result?.error) {
+          joinedBoardId.current = null;
+          setConnectionStatus("error");
+          setCollaborationError(result.error);
+          return;
+        }
+
+        joinedBoardId.current = boardId;
+        setConnectionStatus("connected");
+        setBoardTitle(result.title);
+        setIsBoardOwner(Boolean(result.isOwner));
+        const document = createBoardDocument(result.boardData);
+        rememberDocumentPages(document);
+        setRemoteUpdate({
+          kind: "document",
+          boardData: document,
+          version: ++remoteUpdateVersion.current,
+        });
+        setBoardData(document);
+      });
+    };
+    const handleConnectError = (error) => {
+      if (!active) return;
+      setConnectionStatus("error");
+      setCollaborationError(error.message || "Could not connect to live collaboration.");
+    };
+    const handleDisconnect = () => {
+      joinedBoardId.current = null;
+      setConnectionStatus("offline");
+      setCollaboratorCount(0);
+    };
+    const handlePresence = ({ count }) => {
+      if (active) setCollaboratorCount(count);
+    };
+    const handlePageUpdate = ({ pageId, pageData }) => {
+      const pendingUpdate = pageUpdateTimers.current.get(pageId);
+      const mergedPageData = pendingUpdate
+        ? mergePendingPageChanges(pageData, pendingUpdate.pageData, pendingUpdate.removedIds)
+        : pageData;
+      if (pendingUpdate) pendingUpdate.pageData = mergedPageData;
+      pageSnapshots.current.set(pageId, mergedPageData);
+      setRemoteUpdate({
+        kind: "page",
+        pageId,
+        pageData: mergedPageData,
+        version: ++remoteUpdateVersion.current,
+      });
+      setBoardData((current) => ({
+        ...current,
+        pages: current.pages.map((page) =>
+          page.id === pageId ? { ...page, ...mergedPageData } : page
+        ),
+      }));
+    };
+    const handleDocumentOperation = ({ operation } = {}) => {
+      if (!operation) return;
+      setBoardData((current) => {
+        if (operation.type === "add-page") {
+          if (current.pages.some((page) => page.id === operation.page?.id)) return current;
+          return { ...current, pages: [...current.pages, operation.page] };
+        }
+        if (operation.type === "remove-page") {
+          const removedIndex = current.pages.findIndex((page) => page.id === operation.pageId);
+          if (removedIndex < 0 || current.pages.length < 2) return current;
+          pageSnapshots.current.delete(operation.pageId);
+          const pages = current.pages.filter((page) => page.id !== operation.pageId);
+          const activePageId = current.activePageId === operation.pageId
+            ? pages[Math.min(removedIndex, pages.length - 1)].id
+            : current.activePageId;
+          return { pages, activePageId };
+        }
+        if (operation.type === "set-format") {
+          return {
+            ...current,
+            pages: current.pages.map((page) =>
+              page.id === operation.pageId ? { ...page, format: operation.format } : page
+            ),
+          };
+        }
+        return current;
+      });
+    };
+    const handleBoardError = ({ message }) => {
+      if (active) {
+        setConnectionStatus("error");
+        setCollaborationError(message);
+      }
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("connect_error", handleConnectError);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("board:presence", handlePresence);
+    socket.on("board:page-update", handlePageUpdate);
+    socket.on("board:document-operation", handleDocumentOperation);
+    socket.on("board:error", handleBoardError);
+
+    socket.disconnect();
+    socket.connect();
+
+    return () => {
+      active = false;
+      joinedBoardId.current = null;
+      socket.off("connect", handleConnect);
+      socket.off("connect_error", handleConnectError);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("board:presence", handlePresence);
+      socket.off("board:page-update", handlePageUpdate);
+      socket.off("board:document-operation", handleDocumentOperation);
+      socket.off("board:error", handleBoardError);
+      socket.disconnect();
+      for (const { timer } of scheduledPageUpdates.values()) clearTimeout(timer);
+      scheduledPageUpdates.clear();
+    };
+  }, [boardId, shareToken, token]);
+
+  const collaborationLabel = !boardId
+    ? "Not saved"
+    : connectionStatus === "connected"
+      ? `${collaboratorCount} online · live`
+      : connectionStatus === "joining" || connectionStatus === "connecting"
+        ? "Connecting…"
+        : connectionStatus === "idle" ? "Connecting…"
+        : connectionStatus === "error" ? "Collaboration unavailable" : "Offline";
+
+  const workspace = token ? (
             <div className="workspace" data-theme={theme}>
               <BoardList
                 isOpen={isBoardListOpen}
@@ -270,10 +572,27 @@ function App() {
                   <div>
                     <h1>{boardTitle}</h1>
                     <p>{drawMode ? "Choose a drawing tool, then sketch on the page" : "Click anywhere on a page to type"}</p>
+                    {collaborationError && (
+                      <p className="collaboration-error" role="alert">{collaborationError}</p>
+                    )}
                   </div>
                   <div className="board-heading-actions">
-                    <span className="board-status">Workspace ready</span>
-                    <button className="board-save-button" onClick={handleSave}>Save board</button>
+                    <span className={`board-status is-${connectionStatus}`}>
+                      {collaborationLabel}
+                    </span>
+                    {boardId && isBoardOwner && (
+                      <button className="board-share-button" onClick={handleCreateShareLink}>
+                        Share
+                      </button>
+                    )}
+                    <button
+                      className="board-save-button"
+                      onClick={handleSave}
+                      disabled={Boolean(boardId && !isBoardOwner)}
+                      title={isBoardOwner ? "Save board" : "Changes are saved automatically while connected"}
+                    >
+                      {isBoardOwner ? "Save board" : "Live saved"}
+                    </button>
                   </div>
                 </header>
 
@@ -344,6 +663,7 @@ function App() {
                           </div>
                           <Whiteboard
                             pageId={page.id}
+                            remoteUpdate={remoteUpdate}
                             pageZoom={pageZoom / 100}
                             initialData={page}
                             pageFormat={page.format}
@@ -376,11 +696,14 @@ function App() {
                 </div>
               </aside>
             </div>
-          ) : (
-            <Navigate to="/login" />
-          )
-        }
-      />
+          ) : <Navigate to="/login" />;
+
+  return (
+    <Routes>
+      <Route path="/login" element={!token ? <Login onLogin={handleLogin} /> : <Navigate to="/" />} />
+      <Route path="/signup" element={!token ? <Signup onLogin={handleLogin} /> : <Navigate to="/" />} />
+      <Route path="/" element={workspace} />
+      <Route path="/share/:boardId/:shareToken" element={workspace} />
     </Routes>
   );
 }

@@ -12,6 +12,7 @@ The frontend is a React single-page application for creating and editing multi-p
 - Undo, redo, or clear content on the active page.
 - Search Wikimedia Commons by text, view image source and license information, and add images to a page. Added images can be moved, resized, and individually removed.
 - Switch the workspace between light and dark themes. The drawing pages remain white.
+- Collaborate on a saved board in real time using an owner-generated invite link. Connected users see live page edits and presence; collaborator edits are automatically persisted.
 
 The image panel currently performs typed image search through the backend. Gemini-based suggestions from a board screenshot are available as a backend endpoint but are not wired into the frontend panel.
 
@@ -31,7 +32,7 @@ npm run dev
 
 Vite prints the local development URL, usually `http://localhost:5173`. Start the backend separately; see [the backend README](../Backend/README.md) for MongoDB and environment setup.
 
-The API client currently uses the fixed base URL `http://localhost:5000/api`, so the backend should listen on port 5000 for local development.
+The API defaults to `http://localhost:5000/api`; set `VITE_API_URL` to use another backend URL. The Socket.IO client defaults to `http://localhost:5000`; set `VITE_SOCKET_URL` when the realtime server uses another URL. For local development, both normally point to the backend on port 5000.
 
 ## Scripts
 
@@ -50,7 +51,8 @@ The API client currently uses the fixed base URL `http://localhost:5000/api`, so
 4. Add pages or change the active page's size and orientation from the page controls. Use the zoom selector to change the document view.
 5. Search for images in the side panel, then add a result to the active page. Drag an image to move it; use its handles to resize it; select it and choose Remove to delete that image.
 6. Select Save board to persist the document. For a new board, enter a title when prompted. Use My boards to reopen a saved board.
-7. Use New board to start another document; unsaved changes are discarded after confirmation.
+7. Once a board is saved, select Share to copy an invite link. Invitees need to sign in, then open the link to join and edit the board live. Generating a new link invalidates the previous link.
+8. Use New board to start another document; unsaved changes are discarded after confirmation.
 
 ## Source layout
 
@@ -59,7 +61,7 @@ src/
   api/          Backend API clients
   components/   Board canvas, toolbar, auth forms, board list, image search
   App.jsx       Routes, document state, pages, persistence, and workspace
-  socket.js     Socket.IO client module (not currently used for live collaboration)
+  socket.js     Authenticated Socket.IO client for live board collaboration
   styles.css    Workspace and component styles
 ```
 

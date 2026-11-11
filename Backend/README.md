@@ -6,10 +6,11 @@ The backend is an Express REST API for user accounts, saved whiteboards, and ima
 
 - Registers accounts and signs users in with email and password. Passwords are hashed with bcrypt; successful registration and login return a JWT.
 - Creates, updates, lists, and loads a user's saved boards. Board documents are stored in MongoDB's flexible `data` field, including their pages and drawing objects.
+- Runs an authenticated Socket.IO server for live collaboration. Owners can create invite links; invitees with valid links can join board rooms. Page and document updates are broadcast and persisted as collaborators work.
 - Searches Wikimedia Commons for images, returning thumbnail URLs, source pages, and license metadata.
 - Provides an optional board-image suggestion endpoint. It uses Gemini to derive search terms from a PNG board image, then searches Wikimedia Commons.
 
-The current frontend image panel uses typed Wikimedia Commons search. The Gemini-based board-image suggestion endpoint exists in the API but is not currently connected to that panel. Socket.IO is listed as a dependency, but live collaboration is not currently implemented by the running server.
+The current frontend image panel uses typed Wikimedia Commons search. The Gemini-based board-image suggestion endpoint exists in the API but is not currently connected to that panel.
 
 ## Requirements
 
@@ -58,7 +59,8 @@ The API listens at `http://localhost:5000` by default. `GET /` returns a simple 
 | `POST` | `/api/auth/login` | No | Authenticate and return a JWT |
 | `POST` | `/api/boards/save` | Yes | Create a board or update one owned by the user |
 | `GET` | `/api/boards/load` | Yes | List the signed-in user's boards |
-| `GET` | `/api/boards/:id` | Yes | Load one board owned by the user |
+| `GET` | `/api/boards/:id` | Owner or invitee | Load an owned board, or use `?shareToken=<token>` for a valid invite |
+| `POST` | `/api/boards/:id/share` | Owner | Create or rotate the board's invite link token |
 | `DELETE` | `/api/boards/:id` | Yes | Delete one board owned by the user |
 | `GET` | `/api/gemini/images?q=...` | Yes | Search Wikimedia Commons by text |
 | `POST` | `/api/gemini/suggest` | Yes | Analyze a PNG board image with Gemini and find related images |
@@ -70,6 +72,24 @@ Authorization: Bearer <token>
 ```
 
 The suggestion route expects JSON containing an `image` data URL that begins with `data:image/png;base64,`. The uploaded image must be smaller than 5 MB.
+
+## Socket.IO collaboration
+
+The Socket.IO server shares the Express HTTP server and authenticates each connection using the same JWT as the REST API. After creating a saved board, its owner can use **Share** in the frontend to generate an invite link. Invitees must have an account and be signed in before opening the link. Creating another invite rotates the secret and invalidates the previous link.
+
+The client joins a board room using the board ID and invite token. Only the owner or a user with the current invite token can join or send updates. Page edits and document changes are broadcast to the room and written to MongoDB. Presence reports the number of connected sessions. The raw invite token is never stored in MongoDB; only its SHA-256 hash is stored.
+
+Socket events used by the application:
+
+| Event | Direction | Purpose |
+|---|---|---|
+| `board:join` | Client to server | Authenticate access to a board room and receive its current data |
+| `board:page-update` | Both ways | Synchronize and persist page content changes |
+| `board:document-operation` | Both ways | Synchronize and persist page additions, removals, and format changes without replacing other pages |
+| `board:presence` | Server to clients | Report connected sessions in the board room |
+| `board:error` | Server to client | Report authorization or synchronization errors |
+
+Set `FRONTEND_ORIGIN` to the deployed frontend origin when hosting outside local development; it defaults to `http://localhost:5173`.
 
 ## Project structure
 
@@ -86,6 +106,6 @@ Backend/
 ## Notes
 
 - JWTs expire after 20 days.
-- Board reads, updates, and deletes are scoped to the authenticated user.
+- Board listing, creation, and deletion are scoped to the authenticated owner. Loading a board or joining its live room is also allowed for users with the current invite token; only owners can create/rotate invites.
 - Image search contacts Wikimedia Commons; results include their source and available license information. Check the source page for the applicable reuse terms.
 - The project does not currently define a backend test script.

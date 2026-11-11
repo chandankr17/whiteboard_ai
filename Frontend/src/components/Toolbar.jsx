@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function Toolbar({ tool, setTool, drawMode, onSelectTextMode, onSelectDrawMode, shapeType, setShapeType, color, setColor, textFontSize, setTextFontSize, strokeWidth, setStrokeWidth, onUndo, onRedo, onClear, onLogout, onNewBoard, onListBoards, theme, onToggleTheme }) {
   return (
     <div className="toolbar">
